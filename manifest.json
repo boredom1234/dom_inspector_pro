@@ -1,20 +1,53 @@
 {
   "manifest_version": 3,
-  "name": "XPath & Selector Extractor",
-  "version": "1.0",
-  "description": "Extract XPaths and CSS selectors for all elements on a webpage",
+  "name": "DOM Inspector Pro",
+  "version": "1.1",
+  "description": "Advanced DOM analysis and element extraction for test automation",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage",
+    "sidePanel"
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "Extract XPaths & Selectors"
+    "default_title": "DOM Inspector Pro"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"]
+      "exclude_matches": ["http://localhost:3000/*", "https://localhost:3000/*", "http://127.0.0.1:3000/*", "https://127.0.0.1:3000/*"],
+      "js": ["content-new.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dom-analyzer.js",
+        "content/chat-bridge.js",
+        "content/element-highlighter.js", 
+        "content/continuous-analysis.js",
+        "content/knowledge-chain-tracker.js",
+        "content/element-inspector.js",
+        "content/message-handler.js",
+        "core/base-dom-analyzer.js",
+        "core/advanced-analyzer.js",
+        "core/comprehensive-extractor.js",
+        "core/dom-utilities.js",
+        "popup/configuration-manager.js",
+        "popup/chat-manager.js",
+        "popup/mcp-manager.js", 
+        "popup/analysis-manager.js",
+        "popup/file-manager.js",
+        "popup/ui-event-handlers.js"
+      ],
+      "matches": ["<all_urls>"]
     }
   ],
   "icons": {
