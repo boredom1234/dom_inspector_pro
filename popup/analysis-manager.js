@@ -1,544 +1,457 @@
 /**
- * Analysis Manager Module
- * Handles DOM analysis orchestration, continuous analysis, and result processing
+ * Analysis Manager - Coordinates DOM analysis operations
+ * Handles analysis workflow, continuous analysis, and result processing
  */
 
-class AnalysisManager {
-  constructor() {
-    this.analysisConfig = {};
-  }
+import { MESSAGE_TYPES, UI_CONSTANTS, ERROR_MESSAGES } from '../shared/constants.js';
+import { globalEvents, EVENTS } from '../shared/event-emitter.js';
+import { AnalysisStorage } from '../shared/utils/storage-utils.js';
 
-  /**
-   * Extract DOM elements using enhanced analysis
-   */
-  async extractElements() {
-    try {
-      // Show loading state
-      if (window.uiEventHandlers) {
-        window.uiEventHandlers.setLoadingState(true, "Analyzing...");
-      }
-      
-      const startTime = Date.now();
-      this.updateProgress(10, "Initializing analysis...");
+export class AnalysisManager {
+    constructor() {
+        this.currentAnalysis = null;
+        this.continuousAnalysis = null;
+        this.isAnalyzing = false;
+        this.extractedData = null;
+        this.analysisConfig = {};
+        this.isInitialized = false;
+    }
 
-      // Get current tab
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      // Get comprehensive configuration
-      const config = window.configManager ? window.configManager.getAnalysisConfiguration() : this.getDefaultConfig();
-      this.updateProgress(20, "Configuration loaded");
-      
-      // Store configuration for future use
-      this.analysisConfig = config;
-      if (window.configManager) {
-        window.configManager.saveConfiguration(config);
-      }
-
-      this.updateProgress(30, "Starting DOM analysis...");
-
-      // Execute enhanced analysis via content script
-      let response;
-      try {
-        // First try to ping the content script to see if it's loaded
-        await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+    /**
+     * Initialize analysis manager
+     */
+    initialize() {
+        if (this.isInitialized) return;
         
-        // If ping succeeds, send the actual analysis request
-        response = await chrome.tabs.sendMessage(tab.id, {
-          action: 'analyzeDOM',
-          config: config,
-          options: config
+        this.setupEventListeners();
+        this.isInitialized = true;
+        
+        globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Analysis Manager initialized', UI_CONSTANTS.STATUS_TYPES.INFO);
+    }
+
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Listen for DOM changes from content script
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message.action === MESSAGE_TYPES.DOM_CHANGED) {
+                this.handleDOMChange(message.data);
+            }
         });
-      } catch (connectionError) {
-        // Content script not loaded, check if scripts are already loaded and inject only if needed
-        console.log('Content script not responding, checking for existing scripts and using legacy extraction method');
-        this.updateProgress(40, "Checking for existing scripts...");
-        
+
+        // Listen for configuration changes
+        globalEvents.on(EVENTS.CONFIG_CHANGED, (config) => {
+            this.analysisConfig = { ...this.analysisConfig, ...config };
+        });
+    }
+
+    /**
+     * Start DOM analysis
+     */
+    async startAnalysis(config = {}) {
+        if (this.isAnalyzing) {
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Analysis already in progress', UI_CONSTANTS.STATUS_TYPES.WARNING);
+            return;
+        }
+
         try {
-          // First check if the required classes are already available
-          const checkResults = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            function: () => {
-              return {
-                hasDOMUtilities: typeof DOMUtilities !== 'undefined',
-                hasBaseDOMAnalyzer: typeof BaseDOMAnalyzer !== 'undefined', 
-                hasAdvancedAnalyzer: typeof AdvancedAnalyzer !== 'undefined',
-                hasComprehensiveExtractor: typeof ComprehensiveExtractor !== 'undefined',
-                hasDOMAnalyzer: typeof DOMAnalyzer !== 'undefined',
-                hasExtractFunction: typeof extractElementDataWithAnalyzer !== 'undefined'
-              };
+            this.isAnalyzing = true;
+            this.analysisConfig = config;
+            
+            globalEvents.emit(EVENTS.ANALYSIS_START, config);
+            
+            const startTime = Date.now();
+            globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 10, "Initializing analysis...");
+
+            // Get current tab
+            const [tab] = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+
+            if (!tab) {
+                throw new Error('No active tab found');
             }
-          });
-          
-          const availability = checkResults[0]?.result || {};
-          console.log('Script availability check:', availability);
-          
-          // Only inject scripts that are missing
-          if (!availability.hasDOMUtilities) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['core/dom-utilities.js']
+
+            globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 20, "Configuration loaded");
+            
+            // Store configuration for future use
+            await AnalysisStorage.saveAnalysisHistory({ config, timestamp: new Date().toISOString() });
+
+            globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 30, "Starting DOM analysis...");
+
+            // Execute enhanced analysis via content script
+            let response;
+            try {
+                // First try to ping the content script
+                await chrome.tabs.sendMessage(tab.id, { action: MESSAGE_TYPES.PING });
+                
+                // If ping succeeds, send the actual analysis request
+                response = await chrome.tabs.sendMessage(tab.id, {
+                    action: MESSAGE_TYPES.ANALYZE_DOM,
+                    config: config,
+                    options: config
+                });
+            } catch (connectionError) {
+                // Content script not loaded, use legacy method
+                console.log('Content script not responding, using legacy extraction method');
+                globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 40, "Injecting analysis script...");
+                
+                response = await this.executeScriptInjection(tab.id, config);
+            }
+
+            globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 70, "Processing results...");
+
+            if (response && response.success && response.data) {
+                this.extractedData = response.data;
+                
+                globalEvents.emit(EVENTS.UI_PROGRESS_UPDATE, 90, "Finalizing...");
+                
+                // Store analysis result
+                await AnalysisStorage.saveLastSnapshot(this.extractedData);
+                
+                const analysisResult = {
+                    ...this.extractedData,
+                    duration: Date.now() - startTime,
+                    config: config,
+                    timestamp: new Date().toISOString(),
+                    tabInfo: {
+                        url: tab.url,
+                        title: tab.title
+                    }
+                };
+                
+                globalEvents.emit(EVENTS.ANALYSIS_COMPLETE, analysisResult);
+                globalEvents.emit(EVENTS.DOM_ANALYSIS_READY, this.extractedData);
+                
+                return analysisResult;
+                
+            } else {
+                throw new Error(response?.error || "No data extracted");
+            }
+        } catch (error) {
+            console.error("Analysis error:", error);
+            globalEvents.emit(EVENTS.ANALYSIS_ERROR, error.message);
+            throw error;
+        } finally {
+            this.isAnalyzing = false;
+        }
+    }
+
+    /**
+     * Execute script injection as fallback
+     */
+    async executeScriptInjection(tabId, config) {
+        try {
+            const results = await chrome.scripting.executeScript({
+                target: { tabId },
+                function: this.extractElementDataWithAnalyzer,
+                args: [config],
             });
-          }
-          
-          if (!availability.hasBaseDOMAnalyzer) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['core/base-dom-analyzer.js']
+            
+            if (results && results[0] && results[0].result) {
+                return { success: true, data: results[0].result };
+            } else {
+                throw new Error("Script injection failed");
+            }
+        } catch (error) {
+            throw new Error(`Script injection error: ${error.message}`);
+        }
+    }
+
+    /**
+     * Injected function for legacy analysis (fallback)
+     */
+    extractElementDataWithAnalyzer(config) {
+        // This function runs in the page context
+        if (typeof DOMAnalyzer === 'undefined') {
+            throw new Error('DOMAnalyzer not available');
+        }
+        
+        const analyzer = new DOMAnalyzer(config);
+        return analyzer.analyzeDOM(config);
+    }
+
+    /**
+     * Start continuous analysis
+     */
+    async startContinuousAnalysis(config = {}) {
+        if (this.continuousAnalysis) {
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Continuous analysis already active', UI_CONSTANTS.STATUS_TYPES.WARNING);
+            return;
+        }
+
+        try {
+            const [tab] = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
             });
-          }
-          
-          if (!availability.hasAdvancedAnalyzer) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['core/advanced-analyzer.js']
+
+            if (!tab) {
+                throw new Error('No active tab found');
+            }
+
+            const analysisConfig = {
+                ...config,
+                analysisInterval: config.analysisInterval || 5000
+            };
+
+            await chrome.tabs.sendMessage(tab.id, {
+                action: MESSAGE_TYPES.CONTINUOUS_ANALYSIS,
+                config: analysisConfig
             });
-          }
-          
-          if (!availability.hasComprehensiveExtractor) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['core/comprehensive-extractor.js']
+
+            this.continuousAnalysis = {
+                tabId: tab.id,
+                config: analysisConfig,
+                startTime: Date.now()
+            };
+
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, '🔄 Continuous analysis started', UI_CONSTANTS.STATUS_TYPES.SUCCESS);
+            globalEvents.emit('ui:continuous:update', true);
+            
+        } catch (error) {
+            console.error('Failed to start continuous analysis:', error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, `Failed to start continuous analysis: ${error.message}`, UI_CONSTANTS.STATUS_TYPES.ERROR);
+            throw error;
+        }
+    }
+
+    /**
+     * Stop continuous analysis
+     */
+    async stopContinuousAnalysis() {
+        if (!this.continuousAnalysis) {
+            return;
+        }
+
+        try {
+            await chrome.tabs.sendMessage(this.continuousAnalysis.tabId, {
+                action: MESSAGE_TYPES.STOP_CONTINUOUS_ANALYSIS
             });
-          }
-          
-          if (!availability.hasDOMAnalyzer) {
-            await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: ['dom-analyzer.js']
-            });
-          }
-          
-          this.updateProgress(60, "Executing analysis...");
-          
-          // Now execute the analysis function
-          const results = await chrome.scripting.executeScript({
-            target: { tabId: tab.id },
-            function: (config) => {
-              if (typeof extractElementDataWithAnalyzer === 'function') {
-                return extractElementDataWithAnalyzer(config);
-              } else if (typeof DOMAnalyzer !== 'undefined') {
-                // Fallback: create analyzer directly
-                const analyzer = new DOMAnalyzer(config);
-                return analyzer.analyzeDOM(config);
-              } else {
-                throw new Error('No analysis method available');
-              }
+
+            this.continuousAnalysis = null;
+            
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, '⏹️ Continuous analysis stopped', UI_CONSTANTS.STATUS_TYPES.SUCCESS);
+            globalEvents.emit('ui:continuous:update', false);
+            
+        } catch (error) {
+            console.error('Failed to stop continuous analysis:', error);
+            // Clear locally even if communication failed
+            this.continuousAnalysis = null;
+            globalEvents.emit('ui:continuous:update', false);
+        }
+    }
+
+    /**
+     * Toggle continuous analysis
+     */
+    async toggleContinuousAnalysis(config = {}) {
+        if (this.continuousAnalysis) {
+            await this.stopContinuousAnalysis();
+        } else {
+            await this.startContinuousAnalysis(config);
+        }
+    }
+
+    /**
+     * Handle DOM change notifications
+     */
+    handleDOMChange(changeData) {
+        if (!this.continuousAnalysis) return;
+
+        const changeCount = changeData.changes.added + changeData.changes.modified + changeData.changes.removed;
+        
+        if (changeCount > 0) {
+            globalEvents.emit('ui:domChange:notification', changeData);
+            globalEvents.emit(EVENTS.DOM_CHANGED, changeData);
+        }
+    }
+
+    /**
+     * Download analysis results
+     */
+    async downloadResults() {
+        if (!this.extractedData) {
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'No analysis data to download', UI_CONSTANTS.STATUS_TYPES.WARNING);
+            return;
+        }
+
+        try {
+            // Enhanced download with analysis metadata
+            const downloadData = {
+                ...this.extractedData,
+                metadata: {
+                    generatedBy: 'DOM Inspector Pro with Advanced Analysis',
+                    version: '2.0',
+                    downloadTimestamp: new Date().toISOString(),
+                    configuration: this.analysisConfig,
+                    summary: this.generateAnalysisSummary(this.extractedData)
+                }
+            };
+
+            const jsonData = JSON.stringify(downloadData, null, 2);
+            const blob = new Blob([jsonData], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `dom_inspector_analysis_${new Date()
+                .toISOString()
+                .slice(0, 19)
+                .replace(/:/g, "-")}.json`;
+            
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, "📥 Advanced analysis downloaded!", UI_CONSTANTS.STATUS_TYPES.SUCCESS);
+            
+        } catch (error) {
+            console.error('Download error:', error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, `Download failed: ${error.message}`, UI_CONSTANTS.STATUS_TYPES.ERROR);
+        }
+    }
+
+    /**
+     * Copy results to clipboard
+     */
+    async copyResults() {
+        if (!this.extractedData) {
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'No analysis data to copy', UI_CONSTANTS.STATUS_TYPES.WARNING);
+            return;
+        }
+
+        try {
+            const jsonData = JSON.stringify(this.extractedData, null, 2);
+            await navigator.clipboard.writeText(jsonData);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, "Copied to clipboard!", UI_CONSTANTS.STATUS_TYPES.SUCCESS);
+        } catch (error) {
+            console.error('Copy error:', error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, "Failed to copy to clipboard", UI_CONSTANTS.STATUS_TYPES.ERROR);
+        }
+    }
+
+    /**
+     * Generate analysis summary
+     */
+    generateAnalysisSummary(data) {
+        if (!data) return {};
+
+        return {
+            totalElements: data.elements?.length || 0,
+            detectedPatterns: data.detectedPatterns?.length || 0,
+            analysisFeatures: {
+                domDiff: !!data.domDiff,
+                dependencyGraph: !!data.dependencyGraph,
+                multiStage: !!data.multiStageFlow,
+                templateRecognition: !!data.detectedPatterns,
+                comprehensiveExtraction: !!data.comprehensiveExtraction
             },
-            args: [config],
-          });
-          
-          if (results && results[0] && results[0].result) {
-            response = { success: true, data: results[0].result };
-          } else {
-            throw new Error("Script injection analysis failed");
-          }
-          
-        } catch (injectionError) {
-          console.error('Script injection failed:', injectionError);
-          throw new Error(`Failed to inject analysis scripts: ${injectionError.message}`);
+            performance: data.performance || {},
+            warnings: data.warnings || [],
+            suggestions: data.suggestions || []
+        };
+    }
+
+    /**
+     * Get current extracted data
+     */
+    getExtractedData() {
+        return this.extractedData;
+    }
+
+    /**
+     * Get analysis status
+     */
+    getAnalysisStatus() {
+        return {
+            isAnalyzing: this.isAnalyzing,
+            hasData: !!this.extractedData,
+            continuousActive: !!this.continuousAnalysis,
+            currentConfig: this.analysisConfig
+        };
+    }
+
+    /**
+     * Clear analysis data
+     */
+    clearAnalysisData() {
+        this.extractedData = null;
+        globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Analysis data cleared', UI_CONSTANTS.STATUS_TYPES.INFO);
+        globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'downloadBtn', false);
+        globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'copyBtn', false);
+        globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'sendToMCPBtn', false);
+    }
+
+    /**
+     * Get analysis history
+     */
+    async getAnalysisHistory(limit = 10) {
+        try {
+            return await AnalysisStorage.getAnalysisHistory(limit);
+        } catch (error) {
+            console.error('Failed to get analysis history:', error);
+            return [];
         }
-      }
+    }
 
-      this.updateProgress(70, "Processing results...");
+    /**
+     * Clear analysis history
+     */
+    async clearAnalysisHistory() {
+        try {
+            await AnalysisStorage.clearAnalysisHistory();
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Analysis history cleared', UI_CONSTANTS.STATUS_TYPES.INFO);
+        } catch (error) {
+            console.error('Failed to clear analysis history:', error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Failed to clear analysis history', UI_CONSTANTS.STATUS_TYPES.ERROR);
+        }
+    }
 
-      if (response && response.success && response.data) {
-        const extractedData = response.data;
-        
-        this.updateProgress(90, "Finalizing...");
-        
-        // Display comprehensive results
-        const summary = this.generateAnalysisSummary(extractedData);
-        this.showStatus(summary, "success");
-        
-        this.updateProgress(100, "Analysis complete!");
-        
-        // Auto-hide progress after delay
-        setTimeout(() => {
-          if (window.uiEventHandlers) {
-            const analysisStatus = document.getElementById('analysisStatus');
-            if (analysisStatus) {
-              analysisStatus.classList.remove('active');
+    /**
+     * Validate analysis prerequisites
+     */
+    async validatePrerequisites() {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            
+            if (!tab) {
+                return { isValid: false, error: 'No active tab found' };
             }
-          }
-        }, 2000);
-        
-        return extractedData;
-      } else {
-        throw new Error(response?.error || "No data extracted");
-      }
-    } catch (error) {
-      console.error("Extraction error:", error);
-      this.showStatus("Error in advanced analysis: " + error.message, "error");
-      
-      // Hide analysis status on error
-      if (window.uiEventHandlers) {
-        const analysisStatus = document.getElementById('analysisStatus');
-        if (analysisStatus) {
-          analysisStatus.classList.remove('active');
+
+            if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+                return { isValid: false, error: 'Cannot analyze Chrome internal pages' };
+            }
+
+            // Try to ping content script
+            try {
+                await chrome.tabs.sendMessage(tab.id, { action: MESSAGE_TYPES.PING });
+            } catch (error) {
+                // Content script not loaded - this is OK, we can inject
+                console.log('Content script not loaded, will use injection method');
+            }
+
+            return { isValid: true, tab };
+        } catch (error) {
+            return { isValid: false, error: error.message };
         }
-      }
-      return null;
-    } finally {
-      // Reset loading state
-      if (window.uiEventHandlers) {
-        window.uiEventHandlers.setLoadingState(false);
-      }
-    }
-  }
-
-  /**
-   * Toggle continuous analysis mode
-   */
-  async toggleContinuousAnalysis(currentState) {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-
-    if (!currentState) {
-      // Start continuous analysis
-      const config = window.configManager ? window.configManager.getAnalysisConfiguration() : this.getDefaultConfig();
-      config.analysisInterval = 5000; // 5 second intervals
-      
-      try {
-        await chrome.tabs.sendMessage(tab.id, {
-          action: 'continuousAnalysis',
-          config: config
-        });
-        
-        this.showStatus('🔄 Continuous analysis started', 'success');
-        return true; // New state: active
-      } catch (error) {
-        this.showStatus('❌ Failed to start continuous analysis: ' + error.message, 'error');
-        return false;
-      }
-    } else {
-      // Stop continuous analysis
-      try {
-        await chrome.tabs.sendMessage(tab.id, {
-          action: 'stopContinuousAnalysis'
-        });
-        
-        this.showStatus('⏹️ Continuous analysis stopped', 'success');
-        return false; // New state: inactive
-      } catch (error) {
-        this.showStatus('❌ Failed to stop continuous analysis: ' + error.message, 'error');
-        return true;
-      }
-    }
-  }
-
-  /**
-   * Generate analysis summary from extracted data
-   */
-  generateAnalysisSummary(data) {
-    const elements = data.elements?.length || 0;
-    const patterns = data.detectedPatterns?.length || 0;
-    const changes = data.domDiff?.summary || { added: 0, modified: 0, removed: 0 };
-    const dependencies = data.dependencyGraph?.graph?.nodes?.size || 0;
-    
-    let summary = `✅ Found ${elements} elements`;
-    
-    if (patterns > 0) {
-      summary += `, ${patterns} UI patterns`;
-    }
-    
-    if (changes.added + changes.modified + changes.removed > 0) {
-      summary += `, ${changes.added + changes.modified + changes.removed} changes detected`;
-    }
-    
-    if (dependencies > 0) {
-      summary += `, ${dependencies} dependencies mapped`;
-    }
-    
-    return summary;
-  }
-
-  /**
-   * Get default analysis configuration
-   */
-  getDefaultConfig() {
-    return {
-      // Basic options
-      includeHidden: false,
-      includeText: true,
-      includeAttributes: true,
-      onlyFormElements: false,
-      
-      // Advanced features
-      diffEnabled: false,
-      diffDepth: 10,
-      dependencyTracking: false,
-      maxDependencyDepth: 5,
-      multiStageEnabled: false,
-      stageTimeout: 2000,
-      templateRecognition: false,
-      semanticAnalysis: false,
-      maxDepth: 15
-    };
-  }
-
-  /**
-   * Analyze specific element by selector
-   */
-  async analyzeElement(selector, config = null) {
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      const analysisConfig = config || this.analysisConfig || this.getDefaultConfig();
-
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        action: 'analyzeElement',
-        selector: selector,
-        config: analysisConfig
-      });
-
-      if (response && response.success) {
-        return response.data;
-      } else {
-        throw new Error(response?.error || "Element analysis failed");
-      }
-    } catch (error) {
-      console.error("Element analysis error:", error);
-      this.showStatus("Failed to analyze element: " + error.message, "error");
-      return null;
-    }
-  }
-
-  /**
-   * Perform quick analysis (minimal configuration)
-   */
-  async performQuickAnalysis() {
-    const quickConfig = {
-      includeHidden: false,
-      includeText: true,
-      includeAttributes: true,
-      onlyFormElements: false,
-      maxDepth: 10,
-      // Disable advanced features for speed
-      diffEnabled: false,
-      dependencyTracking: false,
-      multiStageEnabled: false,
-      templateRecognition: false,
-      semanticAnalysis: false
-    };
-
-    try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-
-      this.updateProgress(50, "Quick analysis in progress...");
-
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        action: 'analyzeDOM',
-        config: quickConfig,
-        options: quickConfig
-      });
-
-      if (response && response.success && response.data) {
-        const summary = `⚡ Quick analysis: ${response.data.elements?.length || 0} elements found`;
-        this.showStatus(summary, "success");
-        return response.data;
-      } else {
-        throw new Error(response?.error || "Quick analysis failed");
-      }
-    } catch (error) {
-      console.error("Quick analysis error:", error);
-      this.showStatus("Quick analysis failed: " + error.message, "error");
-      return null;
-    }
-  }
-
-  /**
-   * Get analysis statistics
-   */
-  getAnalysisStats(data) {
-    if (!data || !data.elements) {
-      return {
-        totalElements: 0,
-        interactiveElements: 0,
-        formElements: 0,
-        hiddenElements: 0,
-        analysisTime: 0
-      };
     }
 
-    const stats = {
-      totalElements: data.elements.length,
-      interactiveElements: data.elements.filter(el => el.metadata?.isInteractive).length,
-      formElements: data.elements.filter(el => el.metadata?.isFormElement).length,
-      hiddenElements: data.elements.filter(el => !el.metadata?.isVisible).length,
-      analysisTime: data.performance?.totalTime || 0
-    };
-
-    // Add advanced feature stats if available
-    if (data.detectedPatterns) {
-      stats.detectedPatterns = data.detectedPatterns.length;
+    /**
+     * Get manager state for debugging
+     */
+    getState() {
+        return {
+            isAnalyzing: this.isAnalyzing,
+            hasExtractedData: !!this.extractedData,
+            continuousAnalysis: this.continuousAnalysis,
+            analysisConfig: this.analysisConfig,
+            isInitialized: this.isInitialized
+        };
     }
-
-    if (data.domDiff && data.domDiff.summary) {
-      stats.domChanges = data.domDiff.summary.added + data.domDiff.summary.modified + data.domDiff.summary.removed;
-    }
-
-    if (data.dependencyGraph && data.dependencyGraph.graph) {
-      stats.dependencies = data.dependencyGraph.graph.nodes?.size || 0;
-    }
-
-    return stats;
-  }
-
-  /**
-   * Validate analysis results
-   */
-  validateAnalysisResults(data) {
-    const errors = [];
-    const warnings = [];
-
-    if (!data) {
-      errors.push('No analysis data provided');
-      return { isValid: false, errors, warnings };
-    }
-
-    if (!data.elements || !Array.isArray(data.elements)) {
-      errors.push('Elements array is missing or invalid');
-    }
-
-    if (!data.url || typeof data.url !== 'string') {
-      warnings.push('Source URL is missing');
-    }
-
-    if (!data.timestamp) {
-      warnings.push('Analysis timestamp is missing');
-    }
-
-    if (data.elements && data.elements.length === 0) {
-      warnings.push('No elements were extracted - check configuration');
-    }
-
-    // Validate element structure
-    if (data.elements && data.elements.length > 0) {
-      const sampleElement = data.elements[0];
-      if (!sampleElement.xpath) {
-        warnings.push('Elements missing XPath information');
-      }
-      if (!sampleElement.cssSelector) {
-        warnings.push('Elements missing CSS selector information');
-      }
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-      warnings
-    };
-  }
-
-  /**
-   * Update progress bar (delegates to UI event handlers)
-   */
-  updateProgress(percentage, message) {
-    if (window.uiEventHandlers) {
-      window.uiEventHandlers.updateProgress(percentage, message);
-    }
-  }
-
-  /**
-   * Show status message (delegates to UI event handlers)
-   */
-  showStatus(message, type) {
-    if (window.uiEventHandlers) {
-      window.uiEventHandlers.showStatus(message, type);
-    }
-  }
-
-  /**
-   * Export analysis results with metadata
-   */
-  getExportData(extractedData) {
-    if (!extractedData) return null;
-
-    return {
-      ...extractedData,
-      metadata: {
-        generatedBy: 'DOM Inspector Pro with Advanced Analysis',
-        version: '2.0',
-        exportTimestamp: new Date().toISOString(),
-        configuration: this.analysisConfig,
-        summary: {
-          totalElements: extractedData.elements?.length || 0,
-          detectedPatterns: extractedData.detectedPatterns?.length || 0,
-          analysisFeatures: {
-            domDiff: !!extractedData.domDiff,
-            dependencyGraph: !!extractedData.dependencyGraph,
-            multiStage: !!extractedData.multiStageFlow,
-            templateRecognition: !!extractedData.detectedPatterns,
-            comprehensiveExtraction: !!extractedData.comprehensiveExtraction
-          }
-        }
-      }
-    };
-  }
-
-  /**
-   * Clear cached analysis data
-   */
-  clearCache() {
-    this.analysisConfig = {};
-    
-    // Clear any stored analysis results
-    try {
-      localStorage.removeItem('lastAnalysisResults');
-      localStorage.removeItem('lastAnalysisTimestamp');
-    } catch (error) {
-      console.warn('Failed to clear analysis cache:', error);
-    }
-  }
-
-  /**
-   * Get cached analysis if available and recent
-   */
-  getCachedAnalysis(maxAgeMs = 300000) { // 5 minutes default
-    try {
-      const timestamp = localStorage.getItem('lastAnalysisTimestamp');
-      const results = localStorage.getItem('lastAnalysisResults');
-      
-      if (timestamp && results) {
-        const age = Date.now() - parseInt(timestamp);
-        if (age < maxAgeMs) {
-          return JSON.parse(results);
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to retrieve cached analysis:', error);
-    }
-    
-    return null;
-  }
-
-  /**
-   * Cache analysis results
-   */
-  cacheAnalysis(data) {
-    try {
-      localStorage.setItem('lastAnalysisResults', JSON.stringify(data));
-      localStorage.setItem('lastAnalysisTimestamp', Date.now().toString());
-    } catch (error) {
-      console.warn('Failed to cache analysis results:', error);
-    }
-  }
 }
 
-// Export for use in popup context
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = AnalysisManager;
-} else {
-  window.AnalysisManager = AnalysisManager;
-}
+export default AnalysisManager;

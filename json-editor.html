@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>DOM Inspector Pro - JSON Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #ffffff;
+            color: #111111;
+        }
+
+        .header {
+            background: #fff;
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .header .subtitle {
+            font-size: 13px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .toolbar {
+            background: #fff;
+            padding: 12px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #fff;
+            color: #374151;
+        }
+
+        .btn-primary {
+            background: #111111;
+            color: #ffffff;
+            border-color: #111111;
+        }
+
+        .btn-primary:hover {
+            background: #000000;
+            border-color: #000000;
+        }
+
+        .btn-success {
+            background: #111111;
+            color: #ffffff;
+            border-color: #111111;
+        }
+
+        .btn-success:hover {
+            background: #000000;
+            border-color: #000000;
+        }
+
+        .btn:hover {
+            background: #f9fafb;
+            border-color: #9ca3af;
+        }
+
+        .selection-info {
+            font-size: 13px;
+            color: #6b7280;
+            margin-left: auto;
+        }
+
+        .container {
+            padding: 24px;
+            max-width: 100%;
+            overflow-x: auto;
+        }
+
+        .table-container {
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #f9fafb;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #374151;
+            border-bottom: 1px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+            vertical-align: top;
+        }
+
+        tr:hover {
+            background: #f9fafb;
+        }
+
+        tr.selected {
+            background: #f5f5f5;
+        }
+
+        .checkbox {
+            width: 16px;
+            height: 16px;
+            accent-color: #000000;
+        }
+
+        .editable {
+            background: transparent;
+            border: 1px solid transparent;
+            padding: 4px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+            width: 100%;
+            min-width: 80px;
+            max-width: 200px;
+            box-sizing: border-box;
+        }
+
+        .editable:focus {
+            outline: none;
+            border-color: #000000;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .manual-field {
+            background: #fafafa !important;
+            border-color: #111111 !important;
+            max-width: 150px !important;
+            word-wrap: break-word;
+        }
+
+        .manual-field::placeholder {
+            color: #666666;
+            font-style: italic;
+        }
+
+        .manual-field:focus {
+            background: #fff !important;
+            border-color: #000000 !important;
+            box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.1) !important;
+        }
+
+        .tag-name {
+            background: #f5f5f5;
+            color: #111111;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 11px;
+        }
+
+        .xpath {
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+            font-size: 11px;
+            color: #6b7280;
+            max-width: 200px;
+            word-break: break-all;
+        }
+
+        .boolean-toggle {
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+            border: 1px solid;
+        }
+
+        .boolean-true {
+            background: #111111;
+            color: #ffffff;
+            border-color: #111111;
+        }
+
+        .boolean-false {
+            background: #ffffff;
+            color: #111111;
+            border-color: #111111;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 48px 24px;
+            color: #6b7280;
+        }
+
+        .empty-state h3 {
+            margin: 0 0 8px 0;
+            font-size: 16px;
+            color: #374151;
+        }
+
+        .status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 1000;
+            display: none;
+        }
+
+        .status.success {
+            background: #f5f5f5;
+            color: #111111;
+            border: 1px solid #e5e5e5;
+        }
+
+        .status.error {
+            background: #f5f5f5;
+            color: #111111;
+            border: 1px solid #e5e5e5;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 50%;
+            border-top-color: #000000;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .filters {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-input {
+            padding: 6px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 13px;
+            min-width: 200px;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: #2563eb;
+        }
+    </style>
+    <style>
+        /* Tailwind-first minimal overrides (black/white theme) */
+        .btn {
+            border: 1px solid #111;
+            border-radius: 8px;
+            background: #fff;
+            color: #111;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        .btn:hover { background: #111; color: #fff; }
+    </style>
+</head>
+<body class="bg-white text-black">
+    <div class="header">
+        <h1>🔧 JSON Editor</h1>
+        <div class="subtitle">Edit extracted DOM elements • Select • Copy • Modify</div>
+    </div>
+
+    <div class="toolbar">
+        <button id="selectAllBtn" class="btn">Select All</button>
+        <button id="deselectAllBtn" class="btn">Deselect All</button>
+        <button id="deleteSelectedBtn" class="btn">Delete Selected</button>
+        <button id="copySelectedBtn" class="btn btn-success">📋 Copy Selected</button>
+        <button id="copyAllBtn" class="btn btn-primary">📋 Copy All</button>
+        <div class="selection-info">
+            <span id="selectionCount">0 selected</span> • <span id="totalCount">0 total</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <details class="mb-4 border border-gray-200 rounded" open>
+            <summary class="cursor-pointer px-3 py-2 text-sm font-medium">Filters</summary>
+            <div class="filters px-3 pb-3 pt-2">
+                <input type="text" id="filterInput" class="filter-input" placeholder="Filter by tagName, id, name, or any attribute...">
+                <select id="tagFilter" class="filter-input" style="min-width: 120px;">
+                    <option value="">All Tags</option>
+                </select>
+            </div>
+        </details>
+
+        <div id="tableContainer" class="table-container">
+            <div id="emptyState" class="empty-state">
+                <h3>No Data Available</h3>
+                <p>Extract elements from the main popup to start editing</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <script src="json-editor.js"></script>
+</body>
+</html>

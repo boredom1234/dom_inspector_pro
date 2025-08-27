@@ -1,351 +1,450 @@
 /**
- * Chat Manager Module
- * Handles chat ID detection, knowledge chain status, and chat-related functionality
+ * Chat Manager - Handles Chat ID detection and MCP integration
+ * Focused on chat session management and API communication
  */
 
-class ChatManager {
-  constructor() {
-    this.statusUpdateTimer = null;
-    this.lastStatusUpdate = 0;
-    this.STATUS_UPDATE_DEBOUNCE = 3000; // 3 seconds
-  }
+import { API_CONFIG, EXTENSION_CONFIG, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../shared/constants.js';
+import { validateChatId, validateUrl } from '../shared/utils/validation-utils.js';
+import { ChatIdStorage } from '../shared/utils/storage-utils.js';
+import { globalEvents, EVENTS } from '../shared/event-emitter.js';
 
-  /**
-   * Initialize chat ID detection system
-   */
-  async initializeChatIdDetection() {
-    const chatIdInput = document.getElementById('chatIdInput');
-    const chatIdStatus = document.getElementById('chatIdStatus');
-    const knowledgeChainStatus = document.getElementById('knowledgeChainStatus');
-    
-    if (!chatIdInput || !chatIdStatus || !knowledgeChainStatus) {
-      console.warn('Chat ID elements not found in DOM');
-      return;
+export class ChatManager {
+    constructor() {
+        this.chatId = null;
+        this.connectionStatus = 'disconnected';
+        this.lastStatusUpdate = 0;
+        this.statusUpdateTimer = null;
+        this.isInitialized = false;
     }
-    
-    // Try to detect chat ID from various sources
-    let detectedChatId = null;
-    
-    try {
-      // Method 1: Check if stored in extension storage
-      const stored = await this.getFromStorage(['activeChatId']);
-      if (stored.activeChatId) {
-        detectedChatId = stored.activeChatId;
-      }
-      
-      // Method 2: Try to get from content script
-      if (!detectedChatId) {
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (tab) {
-          try {
-            const response = await chrome.tabs.sendMessage(tab.id, { action: 'getCurrentChatId' });
-            if (response && response.chatId) {
-              detectedChatId = response.chatId;
-            }
-          } catch (e) {
-            console.log('Could not get chat ID from content script:', e);
-          }
-        }
-      }
-      
-      if (detectedChatId) {
-        this.setChatIdSuccess(chatIdInput, chatIdStatus, detectedChatId);
-        await this.updateKnowledgeChainStatus(detectedChatId);
-        this.enableSendButton();
-      } else {
-        this.setChatIdError(chatIdInput, chatIdStatus, knowledgeChainStatus);
-      }
-    } catch (error) {
-      console.error('Error detecting chat ID:', error);
-      this.setChatIdWarning(chatIdStatus);
+
+    /**
+     * Initialize chat manager
+     */
+    async initialize() {
+        if (this.isInitialized) return;
+        
+        await this.detectChatId();
+        this.setupEventListeners();
+        
+        this.isInitialized = true;
+        globalEvents.emit(EVENTS.CHAT_CONNECTION_STATUS, this.connectionStatus);
     }
-    
-    // Set up manual input listener
-    this.setupManualInputListener(chatIdInput, knowledgeChainStatus);
-  }
 
-  /**
-   * Set chat ID success state
-   */
-  setChatIdSuccess(chatIdInput, chatIdStatus, chatId) {
-    chatIdInput.value = chatId;
-    chatIdInput.style.borderColor = '#4CAF50';
-    chatIdStatus.textContent = '✅';
-    chatIdStatus.title = 'Chat ID detected successfully';
-  }
-
-  /**
-   * Set chat ID error state
-   */
-  setChatIdError(chatIdInput, chatIdStatus, knowledgeChainStatus) {
-    chatIdInput.placeholder = 'Chat ID not detected - enter manually';
-    chatIdStatus.textContent = '❌';
-    chatIdStatus.title = 'Could not detect chat ID automatically';
-    knowledgeChainStatus.textContent = 'Knowledge Chain: No chat ID detected';
-  }
-
-  /**
-   * Set chat ID warning state
-   */
-  setChatIdWarning(chatIdStatus) {
-    chatIdStatus.textContent = '⚠️';
-    chatIdStatus.title = 'Error detecting chat ID';
-  }
-
-  /**
-   * Set up listener for manual chat ID input
-   */
-  setupManualInputListener(chatIdInput, knowledgeChainStatus) {
-    chatIdInput.addEventListener('input', async (e) => {
-      const chatId = e.target.value.trim();
-      if (chatId) {
-        await this.updateKnowledgeChainStatus(chatId);
-        this.enableSendButton();
-        // Store for future use
-        this.saveToStorage({ activeChatId: chatId });
-      } else {
-        this.disableSendButton();
-        knowledgeChainStatus.textContent = 'Knowledge Chain: No chat ID';
-      }
-    });
-  }
-
-  /**
-   * Update knowledge chain status with debouncing
-   */
-  async updateKnowledgeChainStatus(chatId) {
-    const knowledgeChainStatus = document.getElementById('knowledgeChainStatus');
-    if (!knowledgeChainStatus) return;
-    
-    // Debounce to prevent excessive API calls
-    const now = Date.now();
-    if (now - this.lastStatusUpdate < this.STATUS_UPDATE_DEBOUNCE) {
-      if (this.statusUpdateTimer) clearTimeout(this.statusUpdateTimer);
-      this.statusUpdateTimer = setTimeout(() => this.updateKnowledgeChainStatus(chatId), this.STATUS_UPDATE_DEBOUNCE);
-      return;
-    }
-    
-    this.lastStatusUpdate = now;
-    
-    try {
-      const response = await fetch(`http://localhost:3000/api/extension-dom?chatId=${chatId}`);
-      if (response.ok) {
-        const data = await response.json();
-        this.processKnowledgeChainResponse(data, knowledgeChainStatus);
-      } else {
-        this.setKnowledgeChainError(knowledgeChainStatus, 'Connection error');
-      }
-    } catch (error) {
-      this.setKnowledgeChainError(knowledgeChainStatus, 'Offline');
-    }
-  }
-
-  /**
-   * Process knowledge chain API response
-   */
-  processKnowledgeChainResponse(data, statusElement) {
-    if (data.success) {
-      if (data.context && data.context.knowledgeChain) {
-        const stateCount = data.context.stateCount || data.context.knowledgeChain.states?.length || 0;
-        statusElement.textContent = `Knowledge Chain: ${stateCount} states recorded`;
-        statusElement.style.color = '#4CAF50';
-      } else if (data.context) {
-        statusElement.textContent = 'Knowledge Chain: DOM context available';
-        statusElement.style.color = '#2196F3';
-      } else {
-        statusElement.textContent = 'Knowledge Chain: Ready to start';
-        statusElement.style.color = '#666';
-      }
-    } else {
-      this.setKnowledgeChainError(statusElement, 'Connection error');
-    }
-  }
-
-  /**
-   * Set knowledge chain error state
-   */
-  setKnowledgeChainError(statusElement, errorType) {
-    statusElement.textContent = `Knowledge Chain: ${errorType}`;
-    statusElement.style.color = '#f44336';
-  }
-
-  /**
-   * Enable send to MCP button
-   */
-  enableSendButton() {
-    const sendToMCPBtn = document.getElementById('sendToMCPBtn');
-    if (sendToMCPBtn) {
-      sendToMCPBtn.disabled = false;
-    }
-  }
-
-  /**
-   * Disable send to MCP button
-   */
-  disableSendButton() {
-    const sendToMCPBtn = document.getElementById('sendToMCPBtn');
-    if (sendToMCPBtn) {
-      sendToMCPBtn.disabled = true;
-    }
-  }
-
-  /**
-   * Get current chat ID from input field
-   */
-  getCurrentChatId() {
-    const chatIdInput = document.getElementById('chatIdInput');
-    return chatIdInput ? chatIdInput.value.trim() : null;
-  }
-
-  /**
-   * Save chat ID to storage
-   */
-  saveChatId(chatId) {
-    this.saveToStorage({ savedChatId: chatId });
-  }
-
-  /**
-   * Load saved chat ID
-   */
-  async loadSavedChatId() {
-    try {
-      const result = await this.getFromStorage(['savedChatId']);
-      if (result.savedChatId) {
+    /**
+     * Setup event listeners
+     */
+    setupEventListeners() {
+        // Listen for chat ID input changes
         const chatIdInput = document.getElementById('chatIdInput');
         if (chatIdInput) {
-          chatIdInput.value = result.savedChatId;
+            chatIdInput.addEventListener('input', async (e) => {
+                const inputChatId = e.target.value.trim();
+                await this.handleChatIdInput(inputChatId);
+            });
         }
-      }
-    } catch (error) {
-      console.warn('Failed to load saved chat ID:', error);
     }
-  }
 
-  /**
-   * Detect chat ID from browser tabs
-   */
-  async detectChatIdFromTabs() {
-    try {
-      const allTabs = await chrome.tabs.query({});
-      console.log('Chat Manager - scanning tabs:', allTabs.length);
+    /**
+     * Detect chat ID from multiple sources
+     */
+    async detectChatId() {
+        let detectedChatId = null;
 
-      // Look for localhost:3000 tabs
-      for (const tab of allTabs) {
-        if (tab.url && (tab.url.includes("localhost:3000") || tab.url.includes("127.0.0.1:3000"))) {
-          // Check for specific chat URL
-          const urlMatch = tab.url.match(/\/chat\/([^\/\?#]+)/);
-          if (urlMatch) {
-            console.log('Chat Manager - found specific chat:', { chatId: urlMatch[1], url: tab.url });
-            return { chatId: urlMatch[1], tab: tab };
-          }
-
-          // Check for homepage (new chat)
-          if (tab.url.match(/^https?:\/\/(localhost|127\.0\.0\.1):3000\/?$/)) {
-            const newChatId = "new-chat-" + Date.now();
-            console.log('Chat Manager - found homepage, using new chat ID:', { chatId: newChatId, url: tab.url });
-            return { chatId: newChatId, tab: tab };
-          }
-        }
-      }
-
-      return { chatId: null, tab: null };
-    } catch (error) {
-      console.error('Error detecting chat ID from tabs:', error);
-      return { chatId: null, tab: null };
-    }
-  }
-
-  /**
-   * Validate chat ID format
-   */
-  validateChatId(chatId) {
-    if (!chatId || typeof chatId !== 'string') {
-      return { valid: false, error: 'Chat ID is required' };
-    }
-    
-    if (chatId.trim().length < 3) {
-      return { valid: false, error: 'Chat ID too short' };
-    }
-    
-    // Allow alphanumeric, hyphens, and underscores
-    if (!/^[a-zA-Z0-9_-]+$/.test(chatId.trim())) {
-      return { valid: false, error: 'Chat ID contains invalid characters' };
-    }
-    
-    return { valid: true };
-  }
-
-  /**
-   * Storage abstraction with fallback
-   */
-  async saveToStorage(data) {
-    try {
-      if (chrome.storage && chrome.storage.local) {
-        await chrome.storage.local.set(data);
-      } else {
-        // Fallback to localStorage
-        Object.entries(data).forEach(([key, value]) => {
-          localStorage.setItem(key, JSON.stringify(value));
-        });
-      }
-    } catch (error) {
-      console.warn('Failed to save to storage:', error);
-      // Final fallback to localStorage
-      Object.entries(data).forEach(([key, value]) => {
         try {
-          localStorage.setItem(key, JSON.stringify(value));
-        } catch (e) {
-          console.error('All storage methods failed:', e);
-        }
-      });
-    }
-  }
-
-  /**
-   * Storage retrieval with fallback
-   */
-  async getFromStorage(keys) {
-    try {
-      if (chrome.storage && chrome.storage.local) {
-        return await chrome.storage.local.get(keys);
-      } else {
-        // Fallback to localStorage
-        const result = {};
-        keys.forEach(key => {
-          const item = localStorage.getItem(key);
-          if (item) {
-            try {
-              result[key] = JSON.parse(item);
-            } catch (e) {
-              result[key] = item;
+            // Strategy 1: Check stored chat ID
+            detectedChatId = await ChatIdStorage.getChatId();
+            
+            // Strategy 2: Try to get from active tab
+            if (!detectedChatId) {
+                detectedChatId = await this.getChatIdFromActiveTab();
             }
-          }
-        });
-        return result;
-      }
-    } catch (error) {
-      console.warn('Failed to get from storage:', error);
-      // Final fallback to localStorage
-      const result = {};
-      keys.forEach(key => {
-        try {
-          const item = localStorage.getItem(key);
-          if (item) {
-            result[key] = JSON.parse(item);
-          }
-        } catch (e) {
-          // Return as string if JSON parse fails
-          result[key] = item;
+            
+            // Strategy 3: Auto-detect from localhost:3000 tabs
+            if (!detectedChatId) {
+                detectedChatId = await this.getChatIdFromLocalhost();
+            }
+
+            if (detectedChatId) {
+                const validation = validateChatId(detectedChatId);
+                if (validation.isValid) {
+                    await this.setChatId(validation.chatId);
+                    globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Chat ID detected successfully', 'success');
+                } else {
+                    console.warn('Invalid detected chat ID:', validation.error);
+                    globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Detected invalid chat ID', 'warning');
+                }
+            } else {
+                globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Chat ID not detected - enter manually', 'info');
+            }
+
+        } catch (error) {
+            console.error('Error detecting chat ID:', error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Error detecting chat ID', 'error');
         }
-      });
-      return result;
     }
-  }
+
+    /**
+     * Get chat ID from active tab content script
+     */
+    async getChatIdFromActiveTab() {
+        try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (!tab) return null;
+
+            const response = await chrome.tabs.sendMessage(tab.id, { 
+                action: 'getCurrentChatId' 
+            });
+            
+            return response?.chatId || null;
+        } catch (error) {
+            console.log('Could not get chat ID from content script:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get chat ID from localhost:3000 tabs
+     */
+    async getChatIdFromLocalhost() {
+        try {
+            const allTabs = await chrome.tabs.query({});
+            
+            // Look for localhost:3000 tabs
+            for (const tab of allTabs) {
+                if (!tab.url) continue;
+                
+                const isLocalhost = tab.url.includes('localhost:3000') || tab.url.includes('127.0.0.1:3000');
+                if (!isLocalhost) continue;
+
+                // Check for specific chat URL
+                const urlMatch = tab.url.match(/\/chat\/([^\/\?#]+)/);
+                if (urlMatch) {
+                    return urlMatch[1];
+                }
+
+                // Check for homepage (new chat)
+                if (tab.url.match(/^https?:\/\/(localhost|127\.0\.0\.1):3000\/?$/)) {
+                    return 'new-chat-' + Date.now();
+                }
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error getting chat ID from localhost tabs:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Handle manual chat ID input
+     */
+    async handleChatIdInput(inputChatId) {
+        if (!inputChatId) {
+            this.chatId = null;
+            globalEvents.emit(EVENTS.CHAT_ID_CHANGED, null);
+            globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'sendToMCPBtn', false);
+            this.updateKnowledgeChainStatus('Knowledge Chain: No chat ID', 'info');
+            return;
+        }
+
+        const validation = validateChatId(inputChatId);
+        if (!validation.isValid) {
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, validation.error, 'warning');
+            return;
+        }
+
+        await this.setChatId(validation.chatId);
+        globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'sendToMCPBtn', true);
+        
+        // Store for future use
+        await ChatIdStorage.saveChatId(validation.chatId);
+        
+        // Update knowledge chain status
+        await this.updateKnowledgeChainStatus();
+    }
+
+    /**
+     * Set current chat ID
+     */
+    async setChatId(chatId) {
+        this.chatId = chatId;
+        globalEvents.emit(EVENTS.CHAT_ID_DETECTED, chatId);
+        globalEvents.emit(EVENTS.CHAT_ID_CHANGED, chatId);
+        
+        // Update UI
+        const chatIdInput = document.getElementById('chatIdInput');
+        if (chatIdInput) {
+            chatIdInput.value = chatId;
+        }
+        
+        // Update status indicators
+        globalEvents.emit('ui:chatIdStatus:update', 'detected', 'Chat ID detected successfully');
+        
+        await this.updateKnowledgeChainStatus();
+    }
+
+    /**
+     * Update knowledge chain connection status with debouncing
+     */
+    async updateKnowledgeChainStatus(customMessage = null, customType = null) {
+        if (customMessage) {
+            globalEvents.emit('ui:knowledgeChain:update', customMessage, customType);
+            return;
+        }
+
+        if (!this.chatId) {
+            globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: No chat ID', 'info');
+            return;
+        }
+
+        // Debounce to prevent excessive API calls
+        const now = Date.now();
+        if (now - this.lastStatusUpdate < EXTENSION_CONFIG.STATUS_UPDATE_DEBOUNCE) {
+            if (this.statusUpdateTimer) clearTimeout(this.statusUpdateTimer);
+            this.statusUpdateTimer = setTimeout(() => 
+                this.updateKnowledgeChainStatus(), EXTENSION_CONFIG.STATUS_UPDATE_DEBOUNCE
+            );
+            return;
+        }
+
+        this.lastStatusUpdate = now;
+
+        try {
+            const url = `${API_CONFIG.MCP_BASE_URL}${API_CONFIG.MCP_EXTENSION_ENDPOINT}?chatId=${this.chatId}`;
+            const response = await fetch(url, { 
+                method: 'GET',
+                timeout: API_CONFIG.REQUEST_TIMEOUT 
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.context?.knowledgeChain) {
+                        const stateCount = data.context.stateCount || data.context.knowledgeChain.states?.length || 0;
+                        globalEvents.emit('ui:knowledgeChain:update', `Knowledge Chain: ${stateCount} states recorded`, 'success');
+                        this.connectionStatus = 'connected';
+                    } else if (data.context) {
+                        globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: DOM context available', 'info');
+                        this.connectionStatus = 'partial';
+                    } else {
+                        globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: Ready to start', 'info');
+                        this.connectionStatus = 'ready';
+                    }
+                } else {
+                    globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: Connection error', 'error');
+                    this.connectionStatus = 'error';
+                }
+            } else {
+                globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: Connection error', 'error');
+                this.connectionStatus = 'error';
+            }
+        } catch (error) {
+            globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: Offline', 'error');
+            this.connectionStatus = 'offline';
+        }
+
+        globalEvents.emit(EVENTS.CHAT_CONNECTION_STATUS, this.connectionStatus);
+    }
+
+    /**
+     * Send DOM data to MCP tool
+     */
+    async sendToMCPTool(extractedData) {
+        if (!extractedData) {
+            throw new Error('No extracted data to send');
+        }
+
+        if (!this.chatId) {
+            throw new Error('No chat ID available. Please detect or enter chat ID first.');
+        }
+
+        try {
+            globalEvents.emit(EVENTS.MCP_SEND_START, this.chatId);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, '📡 Sending DOM data to MCP Tool...', 'success');
+
+            // Get current tab information
+            const [currentTab] = await chrome.tabs.query({
+                active: true,
+                currentWindow: true,
+            });
+
+            // Prepare payload with chat ID
+            const payload = {
+                ...extractedData,
+                chatId: this.chatId,
+                sourceUrl: currentTab?.url || '',
+                timestamp: new Date().toISOString()
+            };
+
+            console.log('Sending to MCP:', {
+                chatId: this.chatId,
+                hasData: !!extractedData,
+                sourceUrl: currentTab?.url
+            });
+
+            const startTime = Date.now();
+            const response = await fetch(API_CONFIG.MCP_BASE_URL + API_CONFIG.MCP_EXTENSION_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Source-URL': currentTab?.url || '',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const duration = Date.now() - startTime;
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            const result = await response.json();
+
+            // Show success message with details
+            const nodeCount = result.enhancedSnapshot?.nodes?.length || 0;
+            const interactiveCount = result.enhancedSnapshot?.nodes?.filter(n => n.interactive)?.length || 0;
+
+            const displayChatId = this.getDisplayChatId();
+            const successMessage = `✅ POST ${API_CONFIG.MCP_EXTENSION_ENDPOINT} 200 in ${duration}ms - Context attached to ${displayChatId}!`;
+            
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, successMessage, 'success');
+            globalEvents.emit(EVENTS.MCP_SEND_SUCCESS, { result, duration, nodeCount, interactiveCount });
+
+            // Show detailed context info after delay
+            setTimeout(() => {
+                globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 
+                    `🎯 ${nodeCount} elements (${interactiveCount} interactive) ready for ${displayChatId}`, 
+                    'success'
+                );
+            }, 2000);
+
+            // Store enhanced snapshot for debugging
+            if (result.enhancedSnapshot) {
+                localStorage.setItem('lastMCPSnapshot', JSON.stringify(result.enhancedSnapshot));
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('MCP Tool integration error:', error);
+            globalEvents.emit(EVENTS.MCP_SEND_ERROR, error);
+            globalEvents.emit(EVENTS.UI_STATUS_UPDATE, `❌ Failed to send to Tool: ${error.message}`, 'error');
+            throw error;
+        }
+    }
+
+    /**
+     * Get display-friendly chat ID
+     */
+    getDisplayChatId() {
+        if (!this.chatId) return 'Unknown';
+        
+        if (this.chatId.startsWith('temp_') || 
+            this.chatId.startsWith('homepage_') || 
+            this.chatId.startsWith('fallback_') ||
+            this.chatId.startsWith('new-chat-')) {
+            return 'Current Session';
+        }
+        
+        return this.chatId.length > 8 ? this.chatId.slice(0, 8) + '...' : this.chatId;
+    }
+
+    /**
+     * Check if MCP tool is available
+     */
+    async checkMCPAvailability() {
+        try {
+            const response = await fetch(API_CONFIG.MCP_BASE_URL + '/api/health', {
+                method: 'GET',
+                timeout: 5000
+            });
+            
+            return response.ok;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
+     * Get current chat ID
+     */
+    getCurrentChatId() {
+        return this.chatId;
+    }
+
+    /**
+     * Get connection status
+     */
+    getConnectionStatus() {
+        return this.connectionStatus;
+    }
+
+    /**
+     * Clear current chat session
+     */
+    async clearChatSession() {
+        this.chatId = null;
+        this.connectionStatus = 'disconnected';
+        
+        await ChatIdStorage.clearChatId();
+        
+        globalEvents.emit(EVENTS.CHAT_ID_CHANGED, null);
+        globalEvents.emit(EVENTS.CHAT_CONNECTION_STATUS, 'disconnected');
+        globalEvents.emit(EVENTS.UI_BUTTON_STATE, 'sendToMCPBtn', false);
+        
+        // Clear UI
+        const chatIdInput = document.getElementById('chatIdInput');
+        if (chatIdInput) {
+            chatIdInput.value = '';
+        }
+        
+        globalEvents.emit('ui:chatIdStatus:update', 'detecting', 'No chat ID');
+        globalEvents.emit('ui:knowledgeChain:update', 'Knowledge Chain: Not connected', 'info');
+    }
+
+    /**
+     * Refresh chat ID detection
+     */
+    async refreshChatId() {
+        globalEvents.emit(EVENTS.UI_STATUS_UPDATE, 'Refreshing chat ID detection...', 'info');
+        globalEvents.emit('ui:chatIdStatus:update', 'detecting', 'Detecting chat ID...');
+        
+        await this.detectChatId();
+    }
+
+    /**
+     * Validate current connection
+     */
+    async validateConnection() {
+        if (!this.chatId) {
+            return { isValid: false, error: 'No chat ID available' };
+        }
+
+        const chatIdValidation = validateChatId(this.chatId);
+        if (!chatIdValidation.isValid) {
+            return { isValid: false, error: chatIdValidation.error };
+        }
+
+        const mcpAvailable = await this.checkMCPAvailability();
+        if (!mcpAvailable) {
+            return { isValid: false, error: 'MCP tool is not available' };
+        }
+
+        return { isValid: true };
+    }
+
+    /**
+     * Get chat manager state for debugging
+     */
+    getState() {
+        return {
+            chatId: this.chatId,
+            connectionStatus: this.connectionStatus,
+            isInitialized: this.isInitialized,
+            lastStatusUpdate: this.lastStatusUpdate
+        };
+    }
 }
 
-// Export for use in popup context
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = ChatManager;
-} else {
-  window.ChatManager = ChatManager;
-}
+export default ChatManager;

@@ -1,8 +1,13 @@
 // Enhanced Content script with advanced DOM analysis capabilities
 // This script runs on all web pages and provides comprehensive DOM extraction
 // Enhanced with automatic interaction tracking for knowledge chain building
+// Now includes validation tracking, conditional rendering detection, and context aggregation
 
 console.log('XPath & Selector Extractor with Advanced Analysis loaded');
+
+// Enhanced tracking components
+let contextAggregator = null;
+let enhancedTrackingEnabled = false;
 
 // Knowledge chain tracking variables
 let interactionSequence = 0;
@@ -29,6 +34,72 @@ if (typeof DOMAnalyzer === 'undefined') {
 // Optional: Add visual indicators when hovering over elements
 let isHighlightMode = false;
 let highlightedElement = null;
+
+// Initialize enhanced tracking
+async function initializeEnhancedTracking() {
+    if (!contextAggregator) {
+        // Dynamically load the enhanced tracking modules
+        try {
+            // Load scripts in sequence since they depend on each other
+            await loadScript('./shared/constants.js');
+            await loadScript('./dom-analyzer/core/element-extractor.js');
+            await loadScript('./content/interaction-tracker.js');
+            await loadScript('./content/validation-tracker.js');
+            await loadScript('./content/conditional-renderer-tracker.js');
+            await loadScript('./content/context-aggregator.js');
+            
+            // Access globally loaded classes
+            if (typeof window.ContextAggregator !== 'undefined' && typeof window.ENHANCED_TRACKING_CONFIG !== 'undefined') {
+                contextAggregator = new window.ContextAggregator(window.ENHANCED_TRACKING_CONFIG.contextAggregation);
+            } else {
+                throw new Error('Required classes not loaded');
+            }
+        } catch (error) {
+            console.error('Failed to load enhanced tracking modules:', error);
+            throw error;
+        }
+    }
+}
+
+// Helper function to load scripts dynamically
+function loadScript(src) {
+    return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL(src);
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+// Start enhanced tracking
+async function startEnhancedTracking() {
+    if (enhancedTrackingEnabled) return;
+    
+    try {
+        await initializeEnhancedTracking();
+        contextAggregator.startAggregation();
+        enhancedTrackingEnabled = true;
+        console.log('✅ Enhanced tracking started - now capturing validations, conditional rendering, and comprehensive context');
+    } catch (error) {
+        console.error('Failed to start enhanced tracking:', error);
+    }
+}
+
+// Stop enhanced tracking
+function stopEnhancedTracking() {
+    if (!enhancedTrackingEnabled) return;
+    
+    try {
+        if (contextAggregator) {
+            contextAggregator.stopAggregation();
+        }
+        enhancedTrackingEnabled = false;
+        console.log('Enhanced tracking stopped');
+    } catch (error) {
+        console.error('Failed to stop enhanced tracking:', error);
+    }
+}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -102,7 +173,120 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
         return true;
     }
+    
+    // Enhanced tracking controls
+    if (request.action === 'startEnhancedTracking') {
+        (async () => {
+            try {
+                await startEnhancedTracking();
+                sendResponse({ 
+                    success: true, 
+                    status: contextAggregator?.getAggregationStatus() 
+                });
+            } catch (error) {
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        return true;
+    }
+    
+    if (request.action === 'stopEnhancedTracking') {
+        stopEnhancedTracking();
+        sendResponse({ success: true });
+        return true;
+    }
+    
+    // Get enhanced tracking status
+    if (request.action === 'getEnhancedTrackingStatus') {
+        sendResponse({
+            success: true,
+            enabled: enhancedTrackingEnabled,
+            status: contextAggregator?.getAggregationStatus() || null
+        });
+        return true;
+    }
+    
+    // Manual context capture
+    if (request.action === 'captureContext') {
+        (async () => {
+            try {
+                initializeEnhancedTracking();
+                const context = await contextAggregator.captureManualContext();
+                sendResponse({ success: true, context });
+            } catch (error) {
+                sendResponse({ success: false, error: error.message });
+            }
+        })();
+        return true;
+    }
+    
+    // Element highlighting for JSON editor
+    if (request.action === 'highlightElement') {
+        highlightElementByXPath(request.xpath);
+        sendResponse({ success: true });
+        return true;
+    }
+    
+    if (request.action === 'removeHighlight') {
+        removeAllHighlights();
+        sendResponse({ success: true });
+        return true;
+    }
 });
+
+function highlightElementByXPath(xpath) {
+    try {
+        // Add highlight styles if not already present
+        if (!document.getElementById('json-editor-highlight-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'json-editor-highlight-styles';
+            styles.textContent = `
+                .json-editor-highlight {
+                    outline: 3px solid #ff6b35 !important;
+                    outline-offset: 2px !important;
+                    box-shadow: 0 0 15px rgba(255, 107, 53, 0.6) !important;
+                    background-color: rgba(255, 107, 53, 0.15) !important;
+                    transition: all 0.3s ease !important;
+                    z-index: 9999 !important;
+                    position: relative !important;
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        // Remove any existing highlights first
+        removeAllHighlights();
+        
+        // Find element by xpath and highlight it
+        const element = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        if (element) {
+            element.classList.add('json-editor-highlight');
+            
+            // Smooth scroll to element if it's not in view
+            const rect = element.getBoundingClientRect();
+            const isInView = rect.top >= 0 && rect.left >= 0 && 
+                           rect.bottom <= window.innerHeight && 
+                           rect.right <= window.innerWidth;
+            
+            if (!isInView) {
+                element.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'center'
+                });
+            }
+        }
+    } catch (error) {
+        console.warn('Could not highlight element:', error);
+    }
+}
+
+function removeAllHighlights() {
+    // Remove highlight from all elements
+    document.querySelectorAll('.json-editor-highlight').forEach(el => {
+        el.classList.remove('json-editor-highlight');
+    });
+}
 
 function toggleHighlightMode() {
     isHighlightMode = !isHighlightMode;
@@ -502,15 +686,19 @@ function requestChatIdFromTool() {
         
         window.addEventListener('message', messageHandler);
         
-        // Broadcast request
+        // Broadcast request - use wildcard origin for cross-domain communication
         try {
-            window.parent.postMessage({
-                type: 'REQUEST_CHAT_ID',
-                source: 'scira-extension',
-                url: window.location.href
-            }, chatToolOrigin);
+            if (window.parent !== window) {
+                window.parent.postMessage({
+                    type: 'REQUEST_CHAT_ID',
+                    source: 'scira-extension',
+                    url: window.location.href,
+                    targetOrigin: chatToolOrigin
+                }, '*');
+            }
         } catch (e) {
-            // Ignore cross-origin errors
+            // Ignore cross-origin errors - this is expected for most pages
+            console.debug('Cross-origin postMessage blocked (expected):', e.message);
         }
         
         // Timeout after 2 seconds

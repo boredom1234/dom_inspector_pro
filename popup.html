@@ -2,14 +2,15 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
             width: 100%;
             min-height: 100vh;
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #fafafa;
-            color: #333;
+            background: #ffffff;
+            color: #111111;
             overflow-x: hidden;
         }
 
@@ -229,6 +230,19 @@
             cursor: pointer;
         }
 
+        .checkbox-item.disabled {
+            opacity: 0.5;
+        }
+
+        .checkbox-item.disabled input[type="checkbox"] {
+            cursor: not-allowed;
+        }
+
+        .checkbox-item.disabled label {
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
         .status {
             margin-top: 12px;
             padding: 8px 12px;
@@ -285,47 +299,186 @@
         .side-panel-mode .btn {
             margin: 4px 0;
         }
+
+        /* Section styling */
+        .section {
+            margin: 20px 0;
+            padding: 16px;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-description {
+            font-size: 12px;
+            color: #6b7280;
+            margin: 8px 0 16px 0;
+            line-height: 1.4;
+        }
+
+        .subsection-header {
+            font-weight: 500;
+            font-size: 13px;
+            color: #374151;
+            margin: 12px 0 8px 0;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .action-buttons .btn {
+            flex: 1;
+            margin: 0;
+        }
     </style>
-</head>
-<body>
+    <style>
+        /* Tailwind-first minimal overrides (black/white theme) */
+        .btn {
+            border: 1px solid #111;
+            border-radius: 8px;
+            background: #fff;
+            color: #111;
+            transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+        .btn:hover { background: #111; color: #fff; }
+        .btn-primary { background: #111; color: #fff; border-color: #111; }
+        .btn-primary:hover { background: #000; color: #fff; border-color: #000; }
+        .btn-primary:disabled,
+        .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary { background: #fff; color: #111; border-color: #111; }
+        .toggle-advanced { background: #f5f5f5; color: #111; border-color: #111; }
+        .options, .feature-group, .section { background: #fff; }
+        .analysis-status { display: none; background: #fafafa; border: 1px solid #e5e5e5; color: #111; }
+        .analysis-status.active { display: block; }
+        .advanced-options { display: none; }
+        .advanced-options.visible { display: block; }
+        .checkbox-item input[type="checkbox"] { accent-color: #000; }
+        .checkbox-item.disabled { opacity: 0.5; }
+        .status { display: none; background: #f5f5f5; color: #111; border: 1px solid #e5e5e5; }
+        .status.success, .status.error { background: #f5f5f5; color: #111; border-color: #e5e5e5; }
+        .pattern-indicator { background: #111; }
+        .progress-fill { background: #000; }
+        .loading { border-color: #e5e5e5; border-top-color: #000; }
+    </style>
+ </head>
+ <body class="bg-white text-black">
     <div class="header">
         <h1>DOM Inspector Pro</h1>
         <div class="panel-info">📌 Side Panel - Stays open while you work</div>
     </div>
     
     <div class="controls">
-        <button id="extractBtn" class="btn btn-primary">
-            <span id="extractText">Extract All Elements</span>
-            <div id="loadingSpinner" class="loading" style="display: none;"></div>
-        </button>
-        
-        <div class="options">
-            <div class="section-header">Basic Options</div>
-            <div class="checkbox-group">
-                <div class="checkbox-item">
-                    <input type="checkbox" id="includeHidden" checked>
-                    <label for="includeHidden">Include hidden elements</label>
+        <!-- BASIC EXTRACTION SECTION -->
+        <div class="section">
+            <div class="section-header">🔍 Basic Element Extraction</div>
+            <p class="section-description">Extract DOM elements from the current page</p>
+            
+            <button id="extractBtn" class="btn btn-primary">
+                <span id="extractText">Extract All Elements</span>
+                <div id="loadingSpinner" class="loading" style="display: none;"></div>
+            </button>
+            
+            <div class="options">
+                <div class="subsection-header">📋 What to Extract</div>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractDOMElements" checked>
+                        <label for="extractDOMElements">DOM Elements (forms, inputs, buttons)</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractXPaths" checked>
+                        <label for="extractXPaths">XPath Selectors</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractElementText" unchecked>
+                        <label for="extractElementText">Element Text Content</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractElementAttributes" unchecked>
+                        <label for="extractElementAttributes">Element Attributes</label>
+                    </div>
+                    
+                    <!-- Individual Attribute Checkboxes -->
+                    <details class="ml-8 mt-2 border border-gray-300 rounded-md bg-gray-50">
+                        <summary class="cursor-pointer px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-t-md select-none">
+                            Individual Attributes
+                        </summary>
+                        <div class="checkbox-group px-3 pb-3 pt-2 bg-white border-t border-gray-200" style="gap: 8px;">
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractClassName" checked>
+                                <label for="extractClassName" style="font-size: 12px;">className</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractDisabled" checked>
+                                <label for="extractDisabled" style="font-size: 12px;">disabled</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractName" checked>
+                                <label for="extractName" style="font-size: 12px;">name</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractPlaceholder" checked>
+                                <label for="extractPlaceholder" style="font-size: 12px;">placeholder</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractRequired" checked>
+                                <label for="extractRequired" style="font-size: 12px;">required</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractType" checked>
+                                <label for="extractType" style="font-size: 12px;">type</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractValue" checked>
+                                <label for="extractValue" style="font-size: 12px;">value</label>
+                            </div>
+                            <div class="checkbox-item">
+                                <input type="checkbox" id="extractVisible" checked>
+                                <label for="extractVisible" style="font-size: 12px;">visible</label>
+                            </div>
+                        </div>
+                    </details>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractPageMetadata" checked>
+                        <label for="extractPageMetadata">Page Metadata (URL, title, timestamp)</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="includeHidden">
+                        <label for="includeHidden">Include hidden elements</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="onlyFormElements">
+                        <label for="onlyFormElements">Only form elements</label>
+                    </div>
                 </div>
-                <div class="checkbox-item">
-                    <input type="checkbox" id="includeText" checked>
-                    <label for="includeText">Include text content</label>
-                </div>
-                <div class="checkbox-item">
-                    <input type="checkbox" id="includeAttributes" checked>
-                    <label for="includeAttributes">Include attributes</label>
-                </div>
-                <div class="checkbox-item">
-                    <input type="checkbox" id="onlyFormElements">
-                    <label for="onlyFormElements">Only form elements</label>
-                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="downloadBtn" class="btn btn-secondary" disabled>
+                    📥 Download Results
+                </button>
+                <button id="copyBtn" class="btn btn-secondary" disabled>
+                    📋 Copy to Clipboard
+                </button>
+                <button id="openJsonEditorBtn" class="btn btn-primary" disabled>
+                    🔧 Edit JSON
+                </button>
             </div>
         </div>
 
-        <button id="toggleAdvanced" class="btn toggle-advanced">
-            🔧 Advanced Features
-        </button>
+        <!-- ADVANCED FEATURES SECTION -->
+        <div class="section">
+            <button id="toggleAdvanced" class="btn toggle-advanced">
+                🔧 Advanced Features
+            </button>
 
-        <div id="advancedOptions" class="advanced-options">
+            <div id="advancedOptions" class="advanced-options">
             <div class="section-header">🔍 Advanced Analysis Features</div>
             
             <div class="feature-group">
@@ -393,37 +546,68 @@
                     <span id="maxDepthValue" class="slider-value">15</span>
                 </div>
             </div>
-        </div>
-
-        <div id="analysisStatus" class="analysis-status">
-            <div>🔄 Advanced analysis in progress...</div>
-            <div class="progress-bar">
-                <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+            
+            <div id="analysisStatus" class="analysis-status">
+                <div>🔄 Advanced analysis in progress...</div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="analysisDetails" style="font-size: 11px; color: #6b7280; margin-top: 4px;"></div>
             </div>
-            <div id="analysisDetails" style="font-size: 11px; color: #6b7280; margin-top: 4px;"></div>
+            
+            <button id="continuousBtn" class="btn btn-secondary" disabled>
+                🔄 Start Continuous Analysis
+            </button>
         </div>
-        
-        <button id="downloadBtn" class="btn btn-secondary" disabled>
-            📥 Download Results
-        </button>
-        
-        <button id="copyBtn" class="btn btn-secondary" disabled>
-            📋 Copy to Clipboard
-        </button>
 
-        <button id="continuousBtn" class="btn btn-secondary" disabled>
-            🔄 Start Continuous Analysis
-        </button>
+        <!-- ENHANCED TRACKING SECTION -->
+        <div class="section">
+            <div class="section-header">🚀 Enhanced Tracking</div>
+            <p class="section-description">Captures user interactions, validations, and dynamic content for comprehensive test generation</p>
+            
+            <button id="enhancedTrackingBtn" class="btn btn-secondary">
+                🚀 Start Enhanced Tracking
+            </button>
+            
+            <div class="options">
+                <div class="subsection-header">📋 What to Extract</div>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractInteractions" checked>
+                        <label for="extractInteractions">User Interactions</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractValidations" checked>
+                        <label for="extractValidations">Form Validations & Errors</label>
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" id="extractConditionalRendering" checked>
+                        <label for="extractConditionalRendering">Conditional Rendering</label>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="contextCaptureBtn" class="btn btn-primary" style="margin-top: 12px;">
+                📸 Capture Context
+            </button>
+            
+            <div id="trackingStatus" class="analysis-status" style="display: none;">
+                <div style="font-size: 11px; white-space: pre-line;"></div>
+            </div>
+        </div>
 
-        <button id="exportConfigBtn" class="btn btn-secondary">
-            ⚙️ Export Config
-        </button>
+        <!-- CONFIGURATION SECTION -->
+        <div class="section">
+            <button id="exportConfigBtn" class="btn btn-secondary">
+                ⚙️ Export Config
+            </button>
+        </div>
         
         <div id="status" class="status"></div>
     </div>
     
     <div class="footer">
-        Click "Extract All Elements" to scan the current page
+        📝 Use Basic Extraction for simple DOM analysis • Enhanced Tracking for complex apps
     </div>
 
     <script src="popup.js"></script>

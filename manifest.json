@@ -9,6 +9,9 @@
     "storage",
     "sidePanel"
   ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "action": {
     "default_title": "DOM Inspector Pro"
   },
@@ -22,30 +25,21 @@
     {
       "matches": ["<all_urls>"],
       "exclude_matches": ["http://localhost:3000/*", "https://localhost:3000/*", "http://127.0.0.1:3000/*", "https://127.0.0.1:3000/*"],
-      "js": ["content-new.js"],
+      "js": ["dom-analyzer.js", "content.js"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": [
-        "dom-analyzer.js",
-        "content/chat-bridge.js",
-        "content/element-highlighter.js", 
-        "content/continuous-analysis.js",
-        "content/knowledge-chain-tracker.js",
-        "content/element-inspector.js",
-        "content/message-handler.js",
-        "core/base-dom-analyzer.js",
-        "core/advanced-analyzer.js",
-        "core/comprehensive-extractor.js",
-        "core/dom-utilities.js",
-        "popup/configuration-manager.js",
-        "popup/chat-manager.js",
-        "popup/mcp-manager.js", 
-        "popup/analysis-manager.js",
-        "popup/file-manager.js",
-        "popup/ui-event-handlers.js"
+        "shared/constants.js",
+        "dom-analyzer/core/element-extractor.js",
+        "content/interaction-tracker.js",
+        "content/validation-tracker.js",
+        "content/conditional-renderer-tracker.js",
+        "content/context-aggregator.js",
+        "json-editor.html",
+        "json-editor.js"
       ],
       "matches": ["<all_urls>"]
     }
