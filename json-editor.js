@@ -71,6 +71,20 @@ function renderTable() {
 
     const columns = getUniqueColumns(extractedData);
     
+    // Create array of elements with their original indices for sorting
+    const elementsWithIndices = extractedData.map((element, index) => ({
+        element,
+        originalIndex: index,
+        isSelected: selectedElements.has(index)
+    }));
+    
+    // Sort so selected items come first
+    elementsWithIndices.sort((a, b) => {
+        if (a.isSelected && !b.isSelected) return -1;
+        if (!a.isSelected && b.isSelected) return 1;
+        return a.originalIndex - b.originalIndex;
+    });
+    
     let html = `
         <table>
             <thead>
@@ -83,7 +97,8 @@ function renderTable() {
                 </tr>
             </thead>
             <tbody>
-                ${extractedData.map((element, index) => renderTableRow(element, index, columns)).join('')}
+                ${elementsWithIndices.map(({ element, originalIndex }, displayIndex) => 
+                    renderTableRow(element, originalIndex, columns, displayIndex)).join('')}
             </tbody>
         </table>
     `;
@@ -122,14 +137,15 @@ function getUniqueColumns(data) {
     return sortedColumns;
 }
 
-function renderTableRow(element, index, columns) {
+function renderTableRow(element, index, columns, displayIndex = null) {
     const isSelected = selectedElements.has(index);
+    const rowNumber = displayIndex !== null ? displayIndex + 1 : index + 1;
     return `
         <tr class="${isSelected ? 'selected' : ''}" data-index="${index}">
             <td>
                 <input type="checkbox" class="row-checkbox checkbox" data-index="${index}" ${isSelected ? 'checked' : ''}>
             </td>
-            <td>${index + 1}</td>
+            <td>${rowNumber}</td>
             ${columns.map(col => renderTableCell(element, col, index)).join('')}
         </tr>
     `;
@@ -186,18 +202,15 @@ function setupTableEventListeners() {
     document.querySelectorAll('.row-checkbox').forEach(checkbox => {
         checkbox.addEventListener('change', (e) => {
             const index = parseInt(e.target.dataset.index);
-            const row = document.querySelector(`tr[data-index="${index}"]`);
             
             if (e.target.checked) {
                 selectedElements.add(index);
-                row.classList.add('selected');
             } else {
                 selectedElements.delete(index);
-                row.classList.remove('selected');
             }
             
-            updateCounts();
-            updateMasterCheckbox();
+            // Re-render table to move selected items to top
+            renderTable();
         });
     });
     
@@ -275,25 +288,17 @@ function selectAll() {
     visibleRows.forEach(row => {
         const index = parseInt(row.dataset.index);
         selectedElements.add(index);
-        row.classList.add('selected');
-        const checkbox = row.querySelector('.row-checkbox');
-        if (checkbox) checkbox.checked = true;
     });
     
-    updateCounts();
-    updateMasterCheckbox();
+    // Re-render table to move selected items to top
+    renderTable();
 }
 
 function deselectAll() {
     selectedElements.clear();
-    document.querySelectorAll('tr.selected').forEach(row => {
-        row.classList.remove('selected');
-    });
-    document.querySelectorAll('.row-checkbox:checked').forEach(checkbox => {
-        checkbox.checked = false;
-    });
-    updateCounts();
-    updateMasterCheckbox();
+    
+    // Re-render table to move deselected items back to original positions
+    renderTable();
 }
 
 function deleteSelected() {
