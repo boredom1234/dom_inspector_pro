@@ -304,9 +304,20 @@ async function openJsonEditor() {
       return;
     }
 
-    // Save data to storage for the editor
+    // Get the active tab URL (the target page, not the extension)
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    // Create enhanced data with URL information
+    const dataWithUrl = {
+      ...applicationState.extractedData,
+      pageUrl: applicationState.extractedData.url || tab?.url || 'Unknown',
+      pageTitle: applicationState.extractedData.title || tab?.title || 'Unknown',
+      timestamp: applicationState.extractedData.timestamp || new Date().toISOString()
+    };
+
+    // Save enhanced data to storage for the editor
     await chrome.storage.local.set({ 
-      extractedData: applicationState.extractedData 
+      extractedData: dataWithUrl 
     });
 
     // Open JSON editor in new window
@@ -363,7 +374,19 @@ async function copyResults() {
   if (!applicationState.extractedData) return;
   
   try {
-    const jsonData = JSON.stringify(applicationState.extractedData, null, 2);
+    // Get the active tab URL (the target page, not the extension)
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    
+    // Create a copy with URL information at the top
+    const dataWithUrl = {
+      dom_insp_extr_data_json: true,
+      pageUrl: applicationState.extractedData.url || tab?.url || 'Unknown',
+      pageTitle: applicationState.extractedData.title || tab?.title || 'Unknown',
+      timestamp: applicationState.extractedData.timestamp || new Date().toISOString(),
+      ...applicationState.extractedData
+    };
+    
+    const jsonData = JSON.stringify(dataWithUrl, null, 2);
     await navigator.clipboard.writeText(jsonData);
     showStatus('📋 Copied to clipboard!', 'success');
   } catch (error) {

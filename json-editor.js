@@ -364,12 +364,38 @@ function getColumnFromInput(input) {
     return null;
 }
 
-function copyToClipboard(data) {
-    const jsonString = JSON.stringify(data, null, 2);
-    navigator.clipboard.writeText(jsonString).catch(err => {
+async function copyToClipboard(data) {
+    try {
+        // Get URL information from the stored extracted data (passed from popup)
+        const result = await new Promise(resolve => {
+            chrome.storage.local.get(['extractedData'], resolve);
+        });
+        
+        let pageUrl = 'Unknown';
+        let pageTitle = 'Unknown';
+        let timestamp = new Date().toISOString();
+        
+        if (result.extractedData) {
+            pageUrl = result.extractedData.pageUrl || result.extractedData.url || pageUrl;
+            pageTitle = result.extractedData.pageTitle || result.extractedData.title || pageTitle;
+            timestamp = result.extractedData.timestamp || timestamp;
+        }
+        
+        // Create data with URL information at the top
+        const dataWithUrl = {
+            dom_insp_extr_data_json: true,
+            pageUrl: pageUrl,
+            pageTitle: pageTitle,
+            timestamp: timestamp,
+            elements: Array.isArray(data) ? data : [data]
+        };
+        
+        const jsonString = JSON.stringify(dataWithUrl, null, 2);
+        await navigator.clipboard.writeText(jsonString);
+    } catch (err) {
         console.error('Failed to copy to clipboard:', err);
         showStatus('Failed to copy to clipboard', 'error');
-    });
+    }
 }
 
 function applyFilters() {
