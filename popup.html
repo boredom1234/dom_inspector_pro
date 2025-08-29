@@ -10,7 +10,7 @@
             margin: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #ffffff;
-            color: #111111;
+            color: #273887;
             overflow-x: hidden;
         }
 
@@ -22,7 +22,7 @@
         }
 
         .header h1 {
-            color: #1a1a1a;
+            color: #273887;
             margin: 0;
             font-size: 16px;
             font-weight: 600;
@@ -31,7 +31,7 @@
 
         .header .panel-info {
             font-size: 11px;
-            color: #666;
+            color: #273887;
             margin-top: 4px;
         }
 
@@ -58,14 +58,14 @@
         }
 
         .btn-primary {
-            background: #2563eb;
+            background: #4865f9;
             color: white;
-            border-color: #2563eb;
+            border-color: #4865f9;
         }
 
         .btn-primary:hover {
-            background: #1d4ed8;
-            border-color: #1d4ed8;
+            background: #3c55d6;
+            border-color: #3c55d6;
         }
 
         .btn-primary:disabled {
@@ -115,7 +115,7 @@
         .section-header {
             font-weight: 600;
             font-size: 14px;
-            color: #1f2937;
+            color: #273887;
             margin-bottom: 12px;
             padding-bottom: 6px;
             border-bottom: 1px solid #e5e7eb;
@@ -132,7 +132,7 @@
         .feature-title {
             font-weight: 500;
             font-size: 13px;
-            color: #374151;
+            color: #273887;
             margin-bottom: 8px;
         }
 
@@ -201,7 +201,7 @@
 
         .progress-fill {
             height: 100%;
-            background: #0ea5e9;
+            background: #4865f9;
             border-radius: 2px;
             transition: width 0.3s ease;
         }
@@ -221,7 +221,7 @@
         .checkbox-item input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #2563eb;
+            accent-color: #4865f9;
         }
 
         .checkbox-item label {
@@ -270,7 +270,7 @@
             height: 14px;
             border: 2px solid #e5e7eb;
             border-radius: 50%;
-            border-top-color: #2563eb;
+            border-top-color: #4865f9;
             animation: spin 0.8s linear infinite;
         }
 
@@ -338,45 +338,44 @@
         }
     </style>
     <style>
-        /* Tailwind-first minimal overrides (black/white theme) */
+        /* Tailwind-first minimal overrides (custom palette) */
         .btn {
-            border: 1px solid #111;
+            border: 1px solid #4865f9;
             border-radius: 8px;
             background: #fff;
-            color: #111;
+            color: #273887;
             transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
         }
-        .btn:hover { background: #111; color: #fff; }
-        .btn-primary { background: #111; color: #fff; border-color: #111; }
-        .btn-primary:hover { background: #000; color: #fff; border-color: #000; }
+        .btn:hover { background: #4865f9; color: #fff; }
+        .btn-primary { background: #4865f9; color: #fff; border-color: #4865f9; }
+        .btn-primary:hover { background: #3c55d6; color: #fff; border-color: #3c55d6; }
         .btn-primary:disabled,
         .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-secondary { background: #fff; color: #111; border-color: #111; }
-        .toggle-advanced { background: #f5f5f5; color: #111; border-color: #111; }
+        .btn-secondary { background: #fff; color: #4865f9; border-color: #4865f9; }
+        .toggle-advanced { background: #f5f5f5; color: #273887; border-color: #4865f9; }
         .options, .feature-group, .section { background: #fff; }
-        .analysis-status { display: none; background: #fafafa; border: 1px solid #e5e5e5; color: #111; }
+        .analysis-status { display: none; background: #f5f7ff; border: 1px solid #4865f9; color: #273887; }
         .analysis-status.active { display: block; }
         .advanced-options { display: none; }
         .advanced-options.visible { display: block; }
-        .checkbox-item input[type="checkbox"] { accent-color: #000; }
+        .checkbox-item input[type="checkbox"] { accent-color: #4865f9; }
         .checkbox-item.disabled { opacity: 0.5; }
-        .status { display: none; background: #f5f5f5; color: #111; border: 1px solid #e5e5e5; }
-        .status.success, .status.error { background: #f5f5f5; color: #111; border-color: #e5e5e5; }
-        .pattern-indicator { background: #111; }
-        .progress-fill { background: #000; }
-        .loading { border-color: #e5e5e5; border-top-color: #000; }
+        .status { display: none; background: #f5f5f5; color: #273887; border: 1px solid #e5e5e5; }
+        .status.success, .status.error { background: #f5f5f5; color: #273887; border-color: #e5e5e5; }
+        .pattern-indicator { background: #4865f9; }
+        .progress-fill { background: #4865f9; }
+        .loading { border-color: #e5e5e5; border-top-color: #4865f9; }
     </style>
  </head>
- <body class="bg-white text-black">
+ <body class="bg-white">
     <div class="header">
         <h1>DOM Inspector Pro</h1>
-        <div class="panel-info">📌 Side Panel - Stays open while you work</div>
     </div>
     
     <div class="controls">
         <!-- BASIC EXTRACTION SECTION -->
         <div class="section">
-            <div class="section-header">🔍 Basic Element Extraction</div>
+            <div class="section-header">🔍 Element Extraction</div>
             <p class="section-description">Extract DOM elements from the current page</p>
             
             <button id="extractBtn" class="btn btn-primary">
