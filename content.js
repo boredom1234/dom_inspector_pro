@@ -93,20 +93,24 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     // Element highlighting for JSON editor
     if (request.action === 'highlightElement') {
-        highlightElementByXPath(request.xpath);
-        sendResponse({ success: true });
+        console.log('Content script received highlightElement request for xpath:', request.xpath);
+        const result = highlightElementByXPath(request.xpath);
+        sendResponse({ success: true, result: result });
         return true;
     }
     
     if (request.action === 'removeHighlight') {
-        removeAllHighlights();
-        sendResponse({ success: true });
+        console.log('Content script received removeHighlight request');
+        const result = removeAllHighlights();
+        sendResponse({ success: true, result: result });
         return true;
     }
 });
 
 function highlightElementByXPath(xpath) {
     try {
+        console.log('highlightElementByXPath called with xpath:', xpath);
+        
         // Add highlight styles if not already present
         if (!document.getElementById('json-editor-highlight-styles')) {
             const styles = document.createElement('style');
@@ -123,15 +127,22 @@ function highlightElementByXPath(xpath) {
                 }
             `;
             document.head.appendChild(styles);
+            console.log('Highlight styles added to page');
         }
         
         // Remove any existing highlights first
-        removeAllHighlights();
+        const removedCount = removeAllHighlights();
+        console.log('Removed', removedCount, 'existing highlights');
         
         // Find element by xpath and highlight it
-        const element = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        console.log('Evaluating xpath:', xpath);
+        const result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+        const element = result.singleNodeValue;
+        
         if (element) {
+            console.log('Found element to highlight:', element.tagName, element);
             element.classList.add('json-editor-highlight');
+            console.log('Added highlight class to element');
             
             // Smooth scroll to element if it's not in view
             const rect = element.getBoundingClientRect();
@@ -140,23 +151,37 @@ function highlightElementByXPath(xpath) {
                            rect.right <= window.innerWidth;
             
             if (!isInView) {
+                console.log('Element not in view, scrolling to it');
                 element.scrollIntoView({ 
                     behavior: 'smooth', 
                     block: 'center',
                     inline: 'center'
                 });
+            } else {
+                console.log('Element is already in view');
             }
+            
+            return { success: true, found: true, tagName: element.tagName };
+        } else {
+            console.warn('No element found with xpath:', xpath);
+            return { success: false, found: false, error: 'Element not found' };
         }
     } catch (error) {
-        console.warn('Could not highlight element:', error);
+        console.error('Error in highlightElementByXPath:', error);
+        return { success: false, found: false, error: error.message };
     }
 }
 
 function removeAllHighlights() {
     // Remove highlight from all elements
-    document.querySelectorAll('.json-editor-highlight').forEach(el => {
+    const highlights = document.querySelectorAll('.json-editor-highlight');
+    console.log('removeAllHighlights: found', highlights.length, 'highlighted elements');
+    
+    highlights.forEach(el => {
         el.classList.remove('json-editor-highlight');
     });
+    
+    return highlights.length;
 }
 
 function toggleHighlightMode() {

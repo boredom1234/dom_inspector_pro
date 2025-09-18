@@ -240,8 +240,20 @@ function setupTableEventListeners() {
             // Visual indicator that hover is available
             row.style.cursor = 'pointer';
             row.title = `Hover to highlight: ${element.xpath}`;
+            
+            // Add visual indicator for hoverable rows
+            row.style.borderLeft = '3px solid transparent';
+            row.addEventListener('mouseenter', () => {
+                row.style.borderLeft = '3px solid #4865f9';
+            });
+            row.addEventListener('mouseleave', () => {
+                row.style.borderLeft = '3px solid transparent';
+            });
         } else {
             console.log(`Row ${index} has no xpath:`, element);
+            // Visual indicator for non-hoverable rows
+            row.style.opacity = '0.7';
+            row.title = 'No XPath available for highlighting';
         }
     });
 }
@@ -488,12 +500,20 @@ function showStatus(message, type) {
 function highlightElementOnPage(xpath) {
     console.log('highlightElementOnPage called with xpath:', xpath);
     
+    if (!xpath) {
+        console.warn('No xpath provided for highlighting');
+        return;
+    }
+    
     // Send message to background script to handle highlighting
     chrome.runtime.sendMessage({
         action: 'highlightElement',
         xpath: xpath
     }).then(response => {
         console.log('Highlight message sent successfully:', response);
+        if (response && !response.success) {
+            console.warn('Highlighting failed:', response.error);
+        }
     }).catch(err => {
         console.error('Failed to send highlight message:', err);
     });

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page for Highlighting</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .test-button {
+            background: #4865f9;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-input {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+        .test-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .test-list li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 id="main-title">Test Page for DOM Inspector Pro</h1>
+        <p>This page contains various elements to test the highlighting functionality.</p>
+        
+        <div class="test-section">
+            <h2>Form Elements</h2>
+            <form id="test-form">
+                <input type="text" id="username" name="username" placeholder="Username" class="test-input">
+                <input type="email" id="email" name="email" placeholder="Email" class="test-input">
+                <input type="password" id="password" name="password" placeholder="Password" class="test-input">
+                <button type="submit" id="submit-btn" class="test-button">Submit</button>
+                <button type="button" id="cancel-btn" class="test-button">Cancel</button>
+            </form>
+        </div>
+        
+        <div class="test-section">
+            <h2>Navigation Elements</h2>
+            <nav id="main-nav">
+                <ul class="test-list">
+                    <li><a href="#home" id="nav-home">Home</a></li>
+                    <li><a href="#about" id="nav-about">About</a></li>
+                    <li><a href="#contact" id="nav-contact">Contact</a></li>
+                </ul>
+            </nav>
+        </div>
+        
+        <div class="test-section">
+            <h2>Content Elements</h2>
+            <article id="main-article">
+                <h3>Article Title</h3>
+                <p class="article-content">This is some article content that should be extractable.</p>
+                <div class="article-meta">
+                    <span class="author">Author: John Doe</span>
+                    <span class="date">Date: 2024-01-01</span>
+                </div>
+            </article>
+        </div>
+        
+        <div class="test-section">
+            <h2>Interactive Elements</h2>
+            <button id="test-btn-1" class="test-button" onclick="alert('Button 1 clicked!')">Test Button 1</button>
+            <button id="test-btn-2" class="test-button" onclick="alert('Button 2 clicked!')">Test Button 2</button>
+            <select id="test-select" class="test-input">
+                <option value="option1">Option 1</option>
+                <option value="option2">Option 2</option>
+                <option value="option3">Option 3</option>
+            </select>
+        </div>
+        
+        <div class="test-section">
+            <h2>Data Elements</h2>
+            <table id="test-table" border="1" style="border-collapse: collapse; width: 100%;">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Age</th>
+                        <th>City</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Alice</td>
+                        <td>25</td>
+                        <td>New York</td>
+                    </tr>
+                    <tr>
+                        <td>Bob</td>
+                        <td>30</td>
+                        <td>San Francisco</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        console.log('Test page loaded. Use DOM Inspector Pro to extract elements and test highlighting.');
+        
+        // Add some dynamic content for testing
+        setTimeout(() => {
+            const dynamicDiv = document.createElement('div');
+            dynamicDiv.id = 'dynamic-content';
+            dynamicDiv.className = 'test-section';
+            dynamicDiv.innerHTML = '<h2>Dynamic Content</h2><p>This content was added dynamically after page load.</p>';
+            document.querySelector('.container').appendChild(dynamicDiv);
+            console.log('Dynamic content added');
+        }, 2000);
+    </script>
+</body>
+</html>
